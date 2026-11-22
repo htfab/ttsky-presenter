@@ -11,3 +11,10 @@ test/sim_build
 test/__pycache__/
 test/results.xml
 test/gate_level_netlist.v
+test/output/
+fpga/basys3/.f4cache
+fpga/basys3/build/
+fpga/basys3/*.bit
+fpga/basys3/usage_*.*ml
+fpga/ulx3s/_build/
+tt
