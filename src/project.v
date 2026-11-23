@@ -64,43 +64,25 @@ end
 
 // Decode the rotary inputs into a two-way rolling counter
 reg [5:0] rot_counter;  // lowest bit is 0 in stable positions
-reg [5:0] alt_counter;  // use an alternate counter if the encoder's button is pressed
 reg rot_A_last;
 reg rot_B_last;
 
 always @(posedge clk) begin
     if (!rst_n) begin
         rot_counter <= 0;   // used for slide number
-        alt_counter <= 42;  // used for QSPI to VGA delay finetuning
         rot_A_last <= 0;
         rot_B_last <= 0;
     end else begin
         if (rot_A == rot_A_last && rot_B != rot_B_last) begin
-            if (ui_in[2]) begin
-                // encoder's button is held down, use alternate counter
-                if (rot_A != rot_B) begin
-                    // right turn
-                    if (alt_counter < 6'b111110) begin
-                       alt_counter <= alt_counter + 1;
-                    end
-                end else begin
-                    // left turn
-                    if (alt_counter > 0) begin
-                        alt_counter <= alt_counter - 1;
-                    end
+            if (rot_A != rot_B) begin
+                // right turn
+                if (rot_counter < 6'b111110) begin
+                   rot_counter <= rot_counter + 1;
                 end
             end else begin
-                // encoder's button is released, use main counter
-                if (rot_A != rot_B) begin
-                    // right turn
-                    if (rot_counter < 6'b111110) begin
-                       rot_counter <= rot_counter + 1;
-                    end
-                end else begin
-                    // left turn
-                    if (rot_counter > 0) begin
-                        rot_counter <= rot_counter - 1;
-                    end
+                // left turn
+                if (rot_counter > 0) begin
+                    rot_counter <= rot_counter - 1;
                 end
             end
         end
@@ -109,19 +91,19 @@ always @(posedge clk) begin
     end
 end
 
-// Tweaking the QSPI delay for post-silicon debugging
-wire [3:0] delay_pixels = alt_counter[5:2];
-wire delay_half_pixel = alt_counter[1];
+// Compensate for the QSPI read delay based on a fixed pattern
+// at the beginning of each line read
+reg [4:0] qspi_delay_correction;
 
 // Send QSPI read command slightly before the end of the line
 // so that the streaming data starts just as we begin the next line
-wire [9:0] start_pos = 777 + {6'b0, delay_pixels};
-wire start_read = (hpos == start_pos) && (vga_clk_gate == delay_half_pixel);
+wire [9:0] start_pos = 775 + {6'b0, qspi_delay_correction[4:1]};
+wire start_read = (hpos == start_pos) && (vga_clk_gate == qspi_delay_correction[0]);
 
 // Stop reading once we get out of the visible screen area
 wire stop_read = (hpos == 639);
 
-// Ignore lowest bit of slide counter that's always 0 in stable positions
+// Ignore lowest bit of rotary counter that's always 0 in stable positions
 wire [4:0] slide_num = rot_counter[5:1];
 
 // When we send the read command near the end of the line,
@@ -134,6 +116,7 @@ wire [23:0] qspi_addr = {slide_num, next_vpos[8:0], 10'b0};
 
 // Use the QSPI state machine to send commands & read data
 wire [3:0] qspi_data;
+wire qspi_start_data;
 
 qspi qspi_inst (
     .clk,
@@ -144,8 +127,97 @@ qspi qspi_inst (
     .uio_in,
     .uio_out,
     .uio_oe,
-    .data(qspi_data)
+    .data(qspi_data),
+    .start_data(qspi_start_data)
 );
+
+// Detect the delay of the incoming QSPI data and perform two adjustments:
+// - coarse: change the time we ask for the next line
+// - fine: use a delay buffer we can tweak by +/- 1 clock tick
+
+reg [2:0] delay_detection_state;
+reg [1:0] qspi_delay_fine_tuning;
+
+always @(posedge clk) begin
+    if (!rst_n) begin
+        qspi_delay_correction <= 0;
+        qspi_delay_fine_tuning <= 0;
+        delay_detection_state <= 0;
+    end else if ((delay_detection_state > 0 || qspi_start_data) && hpos < 640) begin
+        // we are in visible screen area but didn't yet figure out the right delay
+        // => this line is already ruined, start from scratch and recalibrate
+        qspi_delay_correction <= 0;
+        qspi_delay_fine_tuning <= 0;
+        delay_detection_state <= 0;
+    end else if (qspi_start_data) begin
+        // near end of line, we just switched the bidir pins to inputs
+        qspi_delay_fine_tuning <= 0;
+        delay_detection_state <= 1;
+    end else begin
+        // waiting for the "magic line header" preceding the raw pixel data
+        case (delay_detection_state)
+            0: ; // delay detection finished or inactive, do nothing
+            1: if (qspi_data == 4'ha) delay_detection_state <= 2;
+            2: if (qspi_data == 4'h5) delay_detection_state <= 3;
+            3: if (qspi_data == 4'hc) delay_detection_state <= 4;
+            4: if (qspi_data == 4'h3) delay_detection_state <= 5;
+            5: begin
+                // pattern just found => current qspi_data is first pixel of next line
+                if (hpos == 799 && vga_clk_gate) begin
+                    // we are 2 ticks late, this line is already ruined but we
+                    // can fix the next one
+                    qspi_delay_correction <= qspi_delay_correction - 2;
+                    delay_detection_state <= 0;
+                end else if (hpos == 799 && ~vga_clk_gate) begin
+                    // we are 1 tick late, compensate for it in the delay buffer
+                    qspi_delay_fine_tuning <= 0;    // too late to set for first pixel,
+                                                    // that's why it's the default value
+                    qspi_delay_correction <= qspi_delay_correction - 1;
+                    delay_detection_state <= 0;
+                end else if (hpos == 798 && vga_clk_gate) begin
+                    // we are right on time, use middle "neutral" position for delay buffer
+                    qspi_delay_fine_tuning <= 1;
+                    delay_detection_state <= 0;
+                end else if (hpos == 798 && ~vga_clk_gate) begin
+                    // we are 1 tick early, compensate for it in the delay buffer
+                    qspi_delay_fine_tuning <= 2;
+                    qspi_delay_correction <= qspi_delay_correction + 1;
+                    delay_detection_state <= 0;
+                end else begin
+                    // more than 1 tick early, this line is already ruined but
+                    // stay in this state until the end of the line to find
+                    // the right delay value by counting
+                    qspi_delay_fine_tuning <= 2;
+                    qspi_delay_correction <= qspi_delay_correction + 1;
+                end
+               end
+            default: delay_detection_state <= 0;
+        endcase
+    end
+end
+
+// Delay buffer of 1/2/3 ticks based on qspi_delay_fine_tuning
+
+reg [3:0] qspi_buf_1;
+reg [3:0] qspi_buf_2;
+reg [3:0] qspi_buf;
+
+always @(posedge clk) begin
+    if (!rst_n) begin
+        qspi_buf_1 <= 0;
+        qspi_buf_2 <= 0;
+        qspi_buf <= 0;
+    end else begin
+        qspi_buf_1 <= qspi_data;
+        qspi_buf_2 <= qspi_buf_1;
+        case (qspi_delay_fine_tuning)
+            0: qspi_buf <= qspi_data;
+            1: qspi_buf <= qspi_buf_1;
+            2: qspi_buf <= qspi_buf_2;
+            default: qspi_buf <= qspi_data;
+        endcase
+    end
+end
 
 // Calculate screen colors based on data returned from the QSPI PMOD
 
@@ -160,14 +232,14 @@ always @(posedge clk) begin
         red   <= 2'b00;
         green <= 2'b00;
         blue  <= 2'b00;
-    end else if (qspi_data[3]) begin
-        red[1]   <= qspi_data[0];
-        green[1] <= qspi_data[1];
-        blue[1]  <= qspi_data[2];
+    end else if (qspi_buf[3]) begin
+        red[1]   <= qspi_buf[0];
+        green[1] <= qspi_buf[1];
+        blue[1]  <= qspi_buf[2];
     end else begin
-        red[0]   <= qspi_data[0];
-        green[0] <= qspi_data[1];
-        blue[0]  <= qspi_data[2];
+        red[0]   <= qspi_buf[0];
+        green[0] <= qspi_buf[1];
+        blue[0]  <= qspi_buf[2];
     end
 end
 
@@ -196,6 +268,6 @@ end
 assign uo_out = {hsync, B[0], G[0], R[0], vsync, B[1], G[1], R[1]};
 
 // Suppress unused signals warning
-wire _unused_ok = &{ena, ui_in[7:3], next_vpos[9], qspi_data[3]};
+wire _unused_ok = &{ena, ui_in[7:2], next_vpos[9], qspi_data[3]};
 
 endmodule

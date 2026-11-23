@@ -9,7 +9,8 @@ module qspi (
     input  wire [7:0] uio_in,   // connected to QSPI PMOD (input)
     output wire [7:0] uio_out,  // connected to QSPI PMOD (output)
     output wire [7:0] uio_oe,   // connected to QSPI PMOD (output enable)
-    output wire [3:0] data
+    output wire [3:0] data,
+    output wire start_data
 );
 
 // State machine for sequencing QSPI commands
@@ -105,11 +106,14 @@ wire cs_flash = microcode[8];   // chip select: use flash chip on QSPI PMOD
 wire [3:0] qspi_oe = microcode[7:4];
 wire [3:0] qspi_out = microcode[3:0];
 
+wire next_advance = next_microcode[9];
+
 // Handling the bidirectional I/O pins
 
 assign uio_out = {2'b11, qspi_out[3:2], qspi_clk, qspi_out[1:0], cs_flash};
 assign uio_oe = {2'b11, qspi_oe[3:2], 1'b1, qspi_oe[1:0], 1'b1};
 assign data = {uio_in[5:4], uio_in[2:1]};
+assign start_data = (state[7:4] == 1 && advance && !next_advance);
 
 // Suppress unused signals warning
 wire _unused_ok = &{uio_in[7:6], uio_in[3], uio_in[0]};

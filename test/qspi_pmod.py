@@ -3,7 +3,7 @@ from cocotb.triggers import RisingEdge, FallingEdge, First
 
 class QspiPmod:
 
-    def __init__(self, dut, filename, delay=0, verbose=False):
+    def __init__(self, dut, filename, verbose=False):
         self.dut = dut
         self.uio_in = dut.uio_in
         self.uio_out = dut.uio_out
@@ -14,7 +14,6 @@ class QspiPmod:
         self.qspi_out = dut.qspi_out
         self.qspi_oe = dut.qspi_oe
         self.filename = filename
-        self.delay = delay
         self.verbose = verbose
         self.mode = "unknown"
 
@@ -88,10 +87,8 @@ class QspiPmod:
         if await self.rise_or_eot():
             return
         assert self.uio_oe.value == 0b11001001
-        for _ in range(self.delay):
-            # extra dummy clocks
-            if await self.fall_or_eot():
-                return
+        if await self.fall_or_eot():
+            return
         # write data
         while True:
             self.file.seek(pos)
@@ -107,7 +104,7 @@ class QspiPmod:
                 return
 
 
-async def qspi_pmod(dut, filename, delay, verbose):
-    with QspiPmod(dut, filename, delay, verbose) as qspi:
+async def qspi_pmod(dut, filename, verbose):
+    with QspiPmod(dut, filename, verbose) as qspi:
         await qspi.main_loop()
 

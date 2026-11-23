@@ -9,8 +9,6 @@ from PIL import Image, ImageChops
 
 from qspi_pmod import qspi_pmod
 
-GL_TEST = 'GATES' in os.environ
-
 
 async def send_input(dut, sequence, delay):
     for entry in sequence:
@@ -26,9 +24,6 @@ async def test_project(dut):
 
     # Flash data for QSPI Pmod
     QSPI_FLASH_BIN = "../data/slides.bin"
-
-    # QSPI Pmod dummy clock ticks
-    QSPI_DELAY = 3 if GL_TEST else 4
 
     # Set clock period to 20 ns (50 MHz)
     CLOCK_PERIOD = 20
@@ -72,7 +67,7 @@ async def test_project(dut):
     #cocotb.start_soon(clock.start())
 
     # Attach the simulated QSPI Pmod
-    cocotb.start_soon(qspi_pmod(dut, QSPI_FLASH_BIN, QSPI_DELAY, VERBOSE))
+    cocotb.start_soon(qspi_pmod(dut, QSPI_FLASH_BIN, VERBOSE))
 
     # Reset the design
     dut.ena.value = 1
