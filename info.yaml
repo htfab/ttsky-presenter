@@ -27,8 +27,8 @@ pinout:
   # Inputs
   ui[0]: "A (Rotary)"
   ui[1]: "B (Rotary)"
-  ui[2]: "SW (Rotary)"
-  ui[3]: ""
+  ui[2]: "SW (Rotary) / forward"
+  ui[3]: "- / back"
   ui[4]: ""
   ui[5]: ""
   ui[6]: ""

@@ -7,7 +7,7 @@ You can navigate between them using a rotary encoder.
 
 - Connect VGA Pmod to OUTPUT
 - Connect QSPI Pmod to BIDIR
-- Connect Rotary Pmod to INPUT (or simulate it with buttons / switches / commander app / micropython)
+- Connect Rotary Pmod to INPUT
 - Flash the demo slides in `data/slides.bin` to the QSPI Pmod using the
   [Tiny Tapeout flasher](https://tinytapeout.github.io/tinytapeout-flasher/)
 - Select the design
@@ -25,9 +25,10 @@ Using your own slides:
 - Run `flashgen.py` in the `data` directory
 - Continue with the generated `slides.bin` as above
 
-If you find that a few pixels on the left or right side of the screen are cut off,
-there is a debug mechanism to tweak the QSPI to VGA delay. Press down on the rotary
-encoder and turn it clockwise or counterclockwise to adjust in half-pixel increments.
+Alternative navigation:
+
+If you don't have a Rotary Pmod, you can use inputs 2 & 3 as
+buttons to go forward and back respectively.
 
 ## External hardware
 

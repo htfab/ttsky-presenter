@@ -39,40 +39,77 @@ hvsync_generator hvsync_inst (
     .vpos
 );
 
-// Debounce the rotary encoder inputs
+// Debounce the rotary encoder / switch inputs
 wire rot_A_raw = ui_in[0];
 wire rot_B_raw = ui_in[1];
-reg rot_A;
-reg rot_B;
-reg [5:0] debounce_counter;
+wire sw_C_raw = ui_in[2];
+wire sw_D_raw = ui_in[3];
+reg rot_A, rot_B, sw_C, sw_D;
+reg [5:0] rot_A_debounce, rot_B_debounce,
+          sw_C_debounce, sw_D_debounce;
 
 always @(posedge clk) begin
     if (!rst_n) begin
         rot_A <= 0;
         rot_B <= 0;
-        debounce_counter <= 0;
-    end else if (rot_A == rot_A_raw && rot_B == rot_B_raw) begin
-        debounce_counter <= 0;
-    end else if (debounce_counter == 50) begin
-        rot_A <= rot_A_raw;
-        rot_B <= rot_B_raw;
-        debounce_counter <= 0;
+        sw_C <= 0;
+        sw_D <= 0;
+        rot_A_debounce <= 0;
+        rot_B_debounce <= 0;
+        sw_C_debounce <= 0;
+        sw_D_debounce <= 0;
     end else begin
-        debounce_counter <= debounce_counter + 1;
+        if (rot_A == rot_A_raw) begin
+            rot_A_debounce <= 0;
+        end else if (rot_A_debounce == 50) begin
+            rot_A <= rot_A_raw;
+            rot_A_debounce <= 0;
+        end else begin
+            rot_A_debounce <= rot_A_debounce + 1;
+        end
+        if (rot_B == rot_B_raw) begin
+            rot_B_debounce <= 0;
+        end else if (rot_B_debounce == 50) begin
+            rot_B <= rot_B_raw;
+            rot_B_debounce <= 0;
+        end else begin
+            rot_B_debounce <= rot_B_debounce + 1;
+        end
+        if (sw_C == sw_C_raw) begin
+            sw_C_debounce <= 0;
+        end else if (sw_C_debounce == 50) begin
+            sw_C <= sw_C_raw;
+            sw_C_debounce <= 0;
+        end else begin
+            sw_C_debounce <= sw_C_debounce + 1;
+        end
+        if (sw_D == sw_D_raw) begin
+            sw_D_debounce <= 0;
+        end else if (sw_D_debounce == 50) begin
+            sw_D <= sw_D_raw;
+            sw_D_debounce <= 0;
+        end else begin
+            sw_D_debounce <= sw_D_debounce + 1;
+        end
     end
 end
 
-// Decode the rotary inputs into a two-way rolling counter
+// Decode the rotary inputs into a two-way rolling counter,
+// with switches as alternate inputs to increase / decrease the counter
 reg [5:0] rot_counter;  // lowest bit is 0 in stable positions
 reg [4:0] rot_max;      // max value for rot_counter, ignoring the lowest bit
 reg rot_A_last;
 reg rot_B_last;
+reg sw_C_last;
+reg sw_D_last;
 
 always @(posedge clk) begin
     if (!rst_n) begin
         rot_counter <= 0;   // used for slide number
         rot_A_last <= 0;
         rot_B_last <= 0;
+        sw_C_last <= 0;
+        sw_D_last <= 0;
     end else begin
         if (rot_A == rot_A_last && rot_B != rot_B_last) begin
             if (rot_A != rot_B) begin
@@ -86,9 +123,27 @@ always @(posedge clk) begin
                     rot_counter <= rot_counter - 1;
                 end
             end
+        end else if (sw_C && !sw_C_last) begin
+            // forward button / switch
+            if (rot_max == 0) begin
+                rot_counter <= 0;
+            end else if (rot_counter > {rot_max, 1'b0} - 2) begin
+                rot_counter <= {rot_max, 1'b0};
+            end else begin
+                rot_counter <= rot_counter + 2;
+            end
+        end else if (sw_D && !sw_D_last) begin
+            // back button / switch
+            if (rot_counter < 2) begin
+                rot_counter <= 0;
+            end else begin
+                rot_counter <= rot_counter - 2;
+            end
         end
         rot_A_last <= rot_A;
         rot_B_last <= rot_B;
+        sw_C_last <= sw_C;
+        sw_D_last <= sw_D;
     end
 end
 
@@ -283,6 +338,6 @@ end
 assign uo_out = {hsync, B[0], G[0], R[0], vsync, B[1], G[1], R[1]};
 
 // Suppress unused signals warning
-wire _unused_ok = &{ena, ui_in[7:2], next_vpos[9], qspi_data[3]};
+wire _unused_ok = &{ena, ui_in[7:4], next_vpos[9], qspi_data[3]};
 
 endmodule
