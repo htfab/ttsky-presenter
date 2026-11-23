@@ -44,7 +44,7 @@ wire rot_A_raw = ui_in[0];
 wire rot_B_raw = ui_in[1];
 reg rot_A;
 reg rot_B;
-reg [3:0] debounce_counter;
+reg [5:0] debounce_counter;
 
 always @(posedge clk) begin
     if (!rst_n) begin
@@ -53,7 +53,7 @@ always @(posedge clk) begin
         debounce_counter <= 0;
     end else if (rot_A == rot_A_raw && rot_B == rot_B_raw) begin
         debounce_counter <= 0;
-    end else if (debounce_counter == 15) begin
+    end else if (debounce_counter == 50) begin
         rot_A <= rot_A_raw;
         rot_B <= rot_B_raw;
         debounce_counter <= 0;

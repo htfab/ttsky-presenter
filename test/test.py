@@ -145,10 +145,10 @@ async def test_project(dut):
         elif slide_dir == -1 and cur_slide <= 1:
             slide_dir = 1
         if slide_dir == 1:
-            action = send_input(dut, (2, 3, 1, 0), 20)
+            action = send_input(dut, (2, 3, 1, 0), 60)
             cur_slide += 1
         elif slide_dir == -1:
-            action = send_input(dut, (1, 3, 2, 0), 20)
+            action = send_input(dut, (1, 3, 2, 0), 60)
             cur_slide -= 1
         frame = await capture_frame(i, action=action)
         frame.save(f"output/frame{i:03}.png")
