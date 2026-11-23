@@ -64,6 +64,7 @@ end
 
 // Decode the rotary inputs into a two-way rolling counter
 reg [5:0] rot_counter;  // lowest bit is 0 in stable positions
+reg [4:0] rot_max;      // max value for rot_counter, ignoring the lowest bit
 reg rot_A_last;
 reg rot_B_last;
 
@@ -76,7 +77,7 @@ always @(posedge clk) begin
         if (rot_A == rot_A_last && rot_B != rot_B_last) begin
             if (rot_A != rot_B) begin
                 // right turn
-                if (rot_counter < 6'b111110) begin
+                if (rot_counter < {rot_max, 1'b0}) begin
                    rot_counter <= rot_counter + 1;
                 end
             end else begin
@@ -243,6 +244,20 @@ always @(posedge clk) begin
     end
 end
 
+// We need to keep the number of slides in the bitstream to prevent
+// going past the last slide and displaying random data. To keep the
+// code simple, it is recorded as the color of an off-screen pixel.
+
+always @(posedge clk) begin
+    if (!rst_n) begin
+        rot_max <= 0;
+    end else if (vga_clk_gate) begin
+        if (hpos == 0 && vpos == 480) begin
+            rot_max <= {green[0], red[0], blue[1], green[1], red[1]};
+        end
+    end
+end
+
 // Output pixel data for the TinyVGA PMOD
 reg [1:0] R;
 reg [1:0] G;
@@ -252,16 +267,16 @@ always @(posedge clk) begin
         R <= 2'b00;
         G <= 2'b00;
         B <= 2'b00;
-    end else if (!vga_clk_gate) begin
-        // do nothing
-    end else if (!display_on) begin
-        R <= 2'b00;
-        G <= 2'b00;
-        B <= 2'b00;
-    end else begin
-        R <= red;
-        G <= green;
-        B <= blue;
+    end else if (vga_clk_gate) begin
+        if (!display_on) begin
+            R <= 2'b00;
+            G <= 2'b00;
+            B <= 2'b00;
+        end else begin
+            R <= red;
+            G <= green;
+            B <= blue;
+        end
     end
 end
 

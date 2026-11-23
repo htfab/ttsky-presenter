@@ -39,10 +39,11 @@ async def test_project(dut):
     V_BACK    =  33
 
     # Number of frames to capture
-    CAPTURE_FRAMES = 10
+    CAPTURE_FRAMES = 12
 
     # Number of slides available
-    NUM_SLIDES = 5
+    # => increased by 1 to test going past the last slide
+    NUM_SLIDES = 6
 
     # Derived constants
     H_SYNC_START = H_DISPLAY + H_FRONT
